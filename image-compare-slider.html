@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Comparison Slider</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .compare-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #111;
+        }
+
+        .image-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .image-before,
+        .image-after {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            transition: transform 0.3s ease;
+        }
+
+        .image-after {
+            clip-path: inset(0 0 0 50%);
+        }
+
+        .slider-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            outline: none;
+            margin: 0;
+            cursor: col-resize;
+            z-index: 3;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 3px;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.5);
+        }
+        
+        .divider {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: white;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .upload-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 3;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .upload-button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s;
+        }
+
+        .upload-button:hover {
+            transform: scale(1.1);
+            background: white;
+        }
+
+        .upload-button input {
+            display: none;
+        }
+
+        .zoom-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+
+        .bottom-slider-container {
+            position: fixed;
+            left: 0;
+            bottom: 0;
+            width: 100vw;
+            height: 48px;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        .bottom-slider {
+            width: 90vw;
+            height: 6px;
+            accent-color: #fff;
+        }
+        .bottom-divider {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="compare-container">
+        <div class="image-container" id="imageContainer">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" class="image-before" id="beforeImage">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" class="image-after" id="afterImage">
+            <div class="slider-container" id="sliderContainer">
+                <input type="range" min="0" max="100" value="50" class="slider" id="slider">
+                <div class="divider" id="divider"></div>
+            </div>
+        </div>
+        <!-- Bottom slider for zoomed mode -->
+        <div class="bottom-slider-container" id="bottomSliderContainer">
+            <input type="range" min="0" max="100" value="50" class="bottom-slider" id="bottomSlider" disabled>
+        </div>
+
+        <div class="upload-buttons">
+            <div class="upload-button" id="resetButton" title="Reset Position">
+                ↺
+            </div>
+            <div class="upload-button" id="toggleZoomButton" title="Toggle Zoom">
+                🔍
+            </div>
+            <div class="upload-button" id="beforeButton" title="Upload Before Image">
+                🖼️
+                <input type="file" id="beforeFile" accept="image/*">
+            </div>
+            <div class="upload-button" id="afterButton" title="Upload After Image">
+                🖼️+
+                <input type="file" id="afterFile" accept="image/*">
+            </div>
+        </div>
+
+        <div class="zoom-info" id="zoomInfo">Zoom: 100%</div>
+    </div>
+
+    <script>
+        const slider = document.getElementById('slider');
+        const beforeImage = document.getElementById('beforeImage');
+        const afterImage = document.getElementById('afterImage');
+        const beforeInput = document.getElementById('beforeFile');
+        const afterInput = document.getElementById('afterFile');
+        const beforeButton = document.getElementById('beforeButton');
+        const afterButton = document.getElementById('afterButton');
+        const toggleZoomButton = document.getElementById('toggleZoomButton');
+        const resetButton = document.getElementById('resetButton');
+        const imageContainer = document.getElementById('imageContainer');
+        const zoomInfo = document.getElementById('zoomInfo');
+        const sliderContainer = document.getElementById('sliderContainer');
+        const bottomSliderContainer = document.getElementById('bottomSliderContainer');
+        const bottomSlider = document.getElementById('bottomSlider');
+
+        let zoomEnabled = false;
+
+        toggleZoomButton.addEventListener('click', () => {
+            zoomEnabled = !zoomEnabled;
+            toggleZoomButton.textContent = zoomEnabled ? '🔍' : '❌';
+            toggleZoomButton.title = zoomEnabled ? 'Zoom Enabled' : 'Zoom Disabled';
+            zoomInfo.style.display = zoomEnabled ? 'block' : 'none';
+        });
+        
+        toggleZoomButton.textContent = '❌';
+        toggleZoomButton.title = 'Zoom Disabled';
+        zoomInfo.style.display = 'none';
+
+        beforeButton.addEventListener('click', () => {
+            beforeInput.click();
+        });
+        
+        afterButton.addEventListener('click', () => {
+            afterInput.click();
+        });
+
+        let scale = 1;
+        let isDragging = false;
+        let startX, startY, translateX = 0, translateY = 0;
+        let isSliding = false;
+
+        function setSliderValue(val) {
+            slider.value = val;
+            bottomSlider.value = val;
+            afterImage.style.clipPath = `inset(0 0 0 ${val}%)`;
+            divider.style.left = `${val}%`;
+        }
+
+        slider.addEventListener('input', (e) => {
+            setSliderValue(e.target.value);
+        });
+        bottomSlider.addEventListener('input', (e) => {
+            setSliderValue(e.target.value);
+        });
+
+        slider.addEventListener('mousemove', (e) => {
+            if (isSliding) {
+                e.stopPropagation();
+            }
+        });
+
+        function handleImageUpload(input, imageElement) {
+            const file = input.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imageElement.src = e.target.result;
+                    scale = 1;
+                    translateX = 0;
+                    translateY = 0;
+                    updateTransform();
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function updateTransform() {
+            beforeImage.style.transform = afterImage.style.transform =
+                `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+            zoomInfo.textContent = `Zoom: ${Math.round(scale * 100)}%`;
+
+            if (scale !== 1) {
+                sliderContainer.style.display = 'none';
+                divider.style.display = 'none';
+                bottomSliderContainer.style.display = 'flex';
+                slider.disabled = true;
+                bottomSlider.disabled = false;
+            } else {
+                sliderContainer.style.display = '';
+                divider.style.display = '';
+                bottomSliderContainer.style.display = 'none';
+                slider.disabled = false;
+                bottomSlider.disabled = true;
+            }
+        }
+
+        imageContainer.addEventListener('wheel', (e) => {
+            if (!zoomEnabled) return;
+            
+            e.preventDefault();
+            const zoomIn = e.deltaY < 0;
+            const zoomOut = e.deltaY > 0 && scale > 1;
+            
+            if (!zoomIn && !zoomOut) return;
+            
+            const delta = zoomIn ? 1.1 : 0.9;
+            const newScale = scale * delta;
+            
+            if (newScale >= 1 && newScale < 5) {
+                const rect = imageContainer.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                translateX = zoomIn ? 
+                    translateX - ((mouseX - translateX) * (delta - 1)) : 
+                    translateX + ((mouseX - translateX) * (1 - delta));
+                    
+                translateY = zoomIn ? 
+                    translateY - ((mouseY - translateY) * (delta - 1)) : 
+                    translateY + ((mouseY - translateY) * (1 - delta));
+                
+                scale = newScale;
+                updateTransform();
+            }
+        });
+
+        imageContainer.addEventListener('mousedown', (e) => {
+            if (!zoomEnabled || isSliding || e.target === slider) return;
+            if (e.button !== 0 || e.target.tagName === 'IMG') return;
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging || isSliding || !zoomEnabled) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            updateTransform();
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        beforeImage.addEventListener('dragstart', e => e.preventDefault());
+        afterImage.addEventListener('dragstart', e => e.preventDefault());
+
+        beforeInput.addEventListener('change', () => handleImageUpload(beforeInput, beforeImage));
+        afterInput.addEventListener('change', () => handleImageUpload(afterInput, afterImage));
+
+        const divider = document.getElementById('divider');
+        setSliderValue(50);
+        slider.disabled = false;
+        bottomSlider.disabled = true;
+
+        slider.addEventListener('mousedown', (e) => {
+            isSliding = true;
+            e.stopPropagation(); 
+        });
+        
+        slider.addEventListener('touchstart', (e) => {
+            isSliding = true;
+            e.stopPropagation();
+        });
+        
+        slider.addEventListener('mousemove', (e) => {
+            if (isSliding) {
+                e.stopPropagation();
+            }
+        });
+        
+        slider.addEventListener('touchmove', (e) => {
+            if (isSliding) {
+                e.stopPropagation();
+            }
+        });
+
+        resetButton.addEventListener('click', () => {
+            translateX = 0;
+            translateY = 0;
+            scale = 1;
+            updateTransform();
+        });
+    </script>
+    
+    <script>
+        
+        const hammer = new Hammer(imageContainer);
+        let lastScale = 1;
+        
+        hammer.get('pinch').set({ enable: true });
+        
+        hammer.on('pinchstart', function(e) {
+            lastScale = scale;
+        });
+
+        hammer.on('pinch', function(e) {
+            if (!zoomEnabled) return;
+            
+            const newScale = lastScale * e.scale;
+
+            if (newScale >= 1 && newScale < 5) {
+                scale = newScale;
+                
+                const rect = imageContainer.getBoundingClientRect();
+                const centerX = e.center.x - rect.left;
+                const centerY = e.center.y - rect.top;
+                
+                translateX = (translateX - centerX) * (scale / lastScale) + centerX;
+                translateY = (translateY - centerY) * (scale / lastScale) + centerY;
+                
+                updateTransform();
+            }
+        });
+        
+        hammer.get('pan').set({ direction: Hammer.DIRECTION_ALL });
+        
+        hammer.on('panstart', function(e) {
+            if (!zoomEnabled) return;
+            
+            startX = translateX;
+            startY = translateY;
+        });
+
+        hammer.on('pan', function(e) {
+            if (!zoomEnabled) return;
+            
+            translateX = startX + e.deltaX;
+            translateY = startY + e.deltaY;
+            updateTransform();
+        });
+    </script>
+</body>
+</html>
